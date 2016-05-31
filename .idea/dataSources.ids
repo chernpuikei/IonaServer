@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component name="dataSourceStorage">
+  <data-source name="MySQL - @localhost" uuid="b8057b05-3f4e-4645-a0e1-89bffb164a12">
+    <database-info product="MySQL" version="5.7.11" jdbc-version="4.0" driver-name="MySQL Connector Java" driver-version="mysql-connector-java-5.1.35 ( Revision: 5fb9c5849535c13917c2cf9baaece6ef9693ef27 )">
+      <extra-name-characters>#@</extra-name-characters>
+      <identifier-quote-string>`</identifier-quote-string>
+    </database-info>
+    <case-sensitivity plain-identifiers="mixed" quoted-identifiers="upper"/>
+    <database-model serializer="dbm" rdbms="MYSQL" format-version="2.5"/>
+  </data-source>
+  <data-source name="MySQL - IonaServer@localhost" uuid="750ee812-33a4-43a7-a533-948131e78897">
+    <database-info product="MySQL" version="5.7.11" jdbc-version="4.0" driver-name="MySQL Connector Java" driver-version="mysql-connector-java-5.1.35 ( Revision: 5fb9c5849535c13917c2cf9baaece6ef9693ef27 )">
+      <extra-name-characters>#@</extra-name-characters>
+      <identifier-quote-string>`</identifier-quote-string>
+    </database-info>
+    <case-sensitivity plain-identifiers="mixed" quoted-identifiers="upper"/>
+    <database-model serializer="dbm" rdbms="MYSQL" format-version="2.5">
+      <schema id="1" name="IonaServer"/>
+      <table id="2" parent="1" name="user_information"/>
+      <column id="3" parent="2" name="emai">
+        <data-type>varchar(255)</data-type>
+      </column>
+      <column id="4" parent="2" name="password">
+        <data-type>varchar(255)</data-type>
+      </column>
+      <index id="5" parent="2" name="emai">
+        <columns>emai</columns>
+        <desc-columns></desc-columns>
+        <unique>1</unique>
+      </index>
+      <key id="6" parent="2" name="emai">
+        <columns>emai</columns>
+        <underlying-index>emai</underlying-index>
+      </key>
+    </database-model>
+  </data-source>
+</component>
