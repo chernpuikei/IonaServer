@@ -5,239 +5,283 @@ import java.sql.*;
 
 class RespondThread implements Runnable {
 
-   private Socket socket;
-   private int[] today;
+    private final static String queryWithES =
+            "select * from %s where email = '%s' and s_i = %d";
+    private final static String getQueryWithESP =
+            "select * from %s where email = '%s' and s_i = %d and p_i = %d";
+    private final static String checkEmail =
+            "select * from user_information where email = '%s'";
+    private final static String checkPassword =
+            "select * from user_information where email = '%s' and password = '%s'";
+    private final static String regis =
+            "insert into user_information(email,password,nickname,intro,width,height) values('%s','%s','%s','%s',%d,%d)";
+    private final static String insertPath =
+            "insert into path_saver (email,s_i,staX,staY,endX,endY,e1x,e1y,e2x,e2y,year,month) values('%s',%d,%f,%f,%f,%f,%f,%f,%f,%f,%d,%d)";
+    private final static String insertPath2 =
+            "insert into path_saver (email,s_i,staX,staY,endX,endY,e1x,e1y,e2x,e2y,e3x,e3y,year,month) values('%s',%d,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%d,%d)";
+    private final static String insertFootprints =
+            "insert into pt_saver (email,pos_x,pos_y,tan1,tan2,s_i,p_i) values('%s',%f,%f,%f,%f,%d,%d)";
 
-   RespondThread(Socket socket,int[] today) {
-      this.socket = socket;
-      this.today = today;
-   }
+    private Socket socket;
 
-   @Override
-   public void run() {
-      try {
-         got(socket);
-      } catch (Exception e) {
-         e.printStackTrace();
-      }
-   }
+    RespondThread(Socket socket) {this.socket = socket;}
 
-   private void got(Socket socket) throws SQLException, IOException {
+    @Override
 
-      Connection connection = DriverManager.getConnection(
-            "jdbc:mysql://localhost:3306/IonaServer","root","aslcnm18");
-      Statement statement = connection.createStatement();
+    public void run() {
+        try {
+            got(socket);
+        } catch(Exception e) {
+            e.printStackTrace();
+        }
+    }
 
-      JsonObject joj = Json.createReader(new BufferedReader(
-            new InputStreamReader(socket.getInputStream()))).readObject();
-      System.out.print(joj+"\n");
-      String requestType = joj.getString("requestType");
-      String email = joj.getString("email");
+    private void got(Socket socket) throws IOException, SQLException {
 
-      switch (requestType) {
-         case "check": //第一种请求,判断登陆或注册
-            ResultSet rs_0 = statement.executeQuery(
-                  "SELECT * from user_information WHERE email = \'"
-                        +joj.getString("email")+"\'");
-            String temp00 = rs_0.next()+"";
-            reply(socket,"respondType",requestType,"value",temp00);
-            break;
-         case "initScreenSize":
-            int width = joj.getInt("width"), height = joj.getInt("height");
-            statement.execute("update user_information set width ="+width
-                        +",height ="+height+" where email ='"+email+"';");
-            break;
-         case "user_info":
-            statement.execute(
-                  "insert into user_information set nickname = '"
-                        +joj.getString("nickname")+"',self_intro ='"
-                        +joj.getString("self_intro")+"';");
-            break;
-         case "login":
-            ResultSet login = statement.executeQuery(
-                  "SELECT * from user_information WHERE email = \'"
-                        +joj.getString("email")+"\'and password=\'"
-                        +joj.getString("poc")+"\'");
-            String r_email = login.next() ? login.getString("email") : "nah";
-            reply(socket,"respondType",requestType,"value",r_email);
-            break;
-         case "register":
-            boolean temp_r = !statement.execute(
-                  "INSERT into user_information(email,password,nickname,intro) VALUES (\'"
-                        +email+"\',\'"+joj.getString("password")+"\',\'"
-                        +joj.getString("nickname")+"\',\'"+joj.getString("self_intro")
-                        +"\')");
-            reply(socket,"respondType",requestType,"value",temp_r+"");
-            break;
-         case "record":
-            JsonArray jsonArray = joj.getJsonArray("AdD");
-            break;
-         case "path":
-            //inserting path record into path_saver
-            statement.execute(
-                  "insert into path_saver (email,s_i,staX,staY,endX,endY,c1X,c1Y,c2X,c2Y) values(\'"
-                        +email+"\',"+joj.getInt("s_i")+","+joj.getJsonNumber("staX")
-                        +","+joj.getJsonNumber("staY")+","+joj.getJsonNumber("endX")
-                        +","+joj.getJsonNumber("endY")+","+joj.getJsonNumber("c1X")
-                        +","+joj.getJsonNumber("c1Y")+","+joj.getJsonNumber("c2X")
-                        +","+joj.getJsonNumber("c2Y")+");");
-            reply(socket,"respondType",requestType,"value","true");
-            break;
-         case "writing_footprint"://根据当前日期
-            JsonArray pos_tan = joj.getJsonArray("pos_tan");
-            int s_i = joj.getInt("s_i")-1;
-            log(s_i);
-            int[] date;
-            ResultSet rsp = statement.executeQuery(
-                  "select year,month,day from pt_saver where email =\'"+email+"\' and s_i ="+s_i);
-            if (rsp.last()) {
-               date = getProperDate(
-                     rsp.getInt("year"),rsp.getInt("month"),rsp.getInt("day"));
-            } else {
-               date = today;
+        Connection connection = DriverManager.getConnection(
+                "jdbc:mysql://localhost:3306/IonaServer","root","aslcnm18");
+        Statement statement = connection.createStatement();
+        JsonObject joj = Json.createReader(socket.getInputStream()).readObject();
+        System.out.print(">>"+joj+"\n");
+        String requestType = joj.getString("requestType");
+        String email = joj.getString("email"), sql, password;
+        int si, pi, year, month, day;
+        JsonNumber sx, sy, ex, ey, e1x, e1y, e2x, e2y, e3x, e3y;
+        JsonObjectBuilder rBuilder = Json.createObjectBuilder();
+        rBuilder.add("requestType",requestType);
+        switch (requestType) {
+            case "check": //第一种请求,判断登陆或注册
+                sql = String.format(checkEmail,email);
+                ResultSet rs_check = statement.executeQuery(sql);
+                boolean record_existed = rs_check.next();
+                rBuilder.add("existed",record_existed);
+                break;
+            case "login":
+                password = joj.getString("password");
+                sql = String.format(checkPassword,email,password);
+                ResultSet login = statement.executeQuery(sql);
+                boolean password_correct = login.next();
+                rBuilder.add("correct",password_correct);
+                break;
+            //merge user_info & register & initScreenSize
+            case "register":
+                password = joj.getString("password");
+                int width = joj.getInt("width"),
+                        height = joj.getInt("height");
+                String nickName = joj.getString("nickName");
+                String selfIntro = joj.getString("selfIntro");
+                sql = String.format(regis,email,password,nickName,selfIntro,width,height);
+                boolean succeeded = !statement.execute(sql);
+                rBuilder.add("succeeded",succeeded);
+                break;
+            case "checkWidthHeight":
+                int width_check = joj.getInt("width"),
+                        height_check = joj.getInt("height");
+                sql = String.format(checkEmail,email);
+                ResultSet rs_cwh = statement.executeQuery(sql);
+                rs_cwh.next();
+                rBuilder.add("result",rs_cwh.getInt("width")==width_check
+                        && rs_cwh.getInt("height")==height_check);
+                break;
+            case "initContent"://根据当前日期
+                //用用户名+年月日拼接处存储在服务器端的用户名
+                System.out.print("about to initContent>\n");
+                si = joj.getInt("si"); pi = joj.getInt("pi");
+                String filename_ic = String.format("%s%d%d.txt",email,si,pi);
+                System.out.print("filename generated:"+filename_ic+"\n");
+                BufferedWriter bw = new BufferedWriter(new FileWriter(filename_ic));
+                String finalInput = joj.getString("province")
+                        +"#"+joj.getString("city")+"#"+joj.getString("content");
+                bw.write(finalInput);
+                bw.flush();
+                break;
+            case "initCanvas":
+                si = joj.getInt("si");
+                JsonArray path = joj.getJsonArray("path"),
+                        posTan = joj.getJsonArray("posTan");
+                sx = path.getJsonNumber(0); sy = path.getJsonNumber(1);
+                ex = path.getJsonNumber(2); ey = path.getJsonNumber(3);
+                e1x = path.getJsonNumber(4); e1y = path.getJsonNumber(5);
+                e2x = path.getJsonNumber(6); e2y = path.getJsonNumber(7);
+                //当前canvas si为0的时候
+                sql = si-1==-1? String.format(checkEmail,email):
+                        String.format(queryWithES,"path_saver",email,si-1);
+                ResultSet rs_date = statement.executeQuery(sql);
+                rs_date.next();
+                int year_ic = rs_date.getInt("year"),
+                        month_ic = rs_date.getInt("month");
+                //两段注释之间是为了初始化时间
+                if (path.size()==10) {
+                    e3x = path.getJsonNumber(8); e3y = path.getJsonNumber(9);
+                    sql = String.format(insertPath2,email,si,f(sx),f(sy),f(ex),f(ey),f(e1x),f(e1y),f(e2x),f(e2y),f(e3x),f(e3y),year_ic,month_ic);
+                } else {
+                    sql = String.format(insertPath,email,si,f(sx),f(sy),f(ex),f(ey),f(e1x),f(e1y),f(e2x),f(e2y),year_ic,month_ic);
+                }
+                statement.execute(sql);
+                int size_ic = posTan.size()/4;
+                for (int i = 0;i<size_ic;i++) {
+                    sql = String.format(insertFootprints,email,
+                            posTan.getJsonNumber(4*i).doubleValue(),
+                            posTan.getJsonNumber(4*i+1).doubleValue(),
+                            posTan.getJsonNumber(4*i+2).doubleValue(),
+                            posTan.getJsonNumber(4*i+3).doubleValue(),
+                            si,i);
+                    statement.execute(sql);
+                }
+                break;
+            case "requestCanvas":
+                System.out.print("requestCanvas>>\n");
+                si = joj.getInt("si");
+                sql = String.format(queryWithES,"path_saver",email,si);
+                System.out.print("sql 2b execute:"+sql+"\n");
+                ResultSet rs_path = statement.executeQuery(sql);
+                boolean recordExisted = rs_path.next();
+                rBuilder.add("canvas_exist",recordExisted);
+                if (recordExisted) {
+                    //先写path
+                    JsonArrayBuilder builder_path = Json.createArrayBuilder();
+                    builder_path.add(rs_path.getFloat("staX"))
+                            .add(rs_path.getFloat("staY"))
+                            .add(rs_path.getFloat("endX"))
+                            .add(rs_path.getFloat("endY"))
+                            .add(rs_path.getFloat("e1x"))
+                            .add(rs_path.getFloat("e1y"))
+                            .add(rs_path.getFloat("e2x"))
+                            .add(rs_path.getFloat("e2y"))
+                            .add(rs_path.getFloat("e3x"))
+                            .add(rs_path.getFloat("e3y"));
+                    rBuilder.add("path",builder_path.build());
+                    //再写date
+                    JsonArrayBuilder builder_date = Json.createArrayBuilder();
+                    sql = String.format(queryWithES,"path_saver",email,si);
+                    ResultSet rs_rc_date = statement.executeQuery(sql);
+                    rs_rc_date.next();
+                    builder_date.add(rs_rc_date.getInt("year"))
+                            .add(rs_rc_date.getInt("month"));
+                    rBuilder.add("date",builder_date.build());
+                    //最后写footprints
+                    JsonArrayBuilder builder_fps = Json.createArrayBuilder();
+                    sql = String.format(queryWithES,"pt_saver",email,si);
+                    ResultSet rs_fps = statement.executeQuery(sql);
+                    while (rs_fps.next()) {
+                        builder_fps.add(rs_fps.getFloat("pos_x"))
+                                .add(rs_fps.getFloat("pos_y"))
+                                .add(rs_fps.getFloat("tan1"))
+                                .add(rs_fps.getFloat("tan2"));
+                    }
+                    rBuilder.add("posTan",builder_fps.build());
+                } else {
+                    System.out.print("record not exist>>\n");
+                    //todo:当si=0时，返回(0,0)作为preDes
+                    //todo:先试试不区分si等不等于0
+                    //todo:不等于0:e3x=0&&e3y=0 >> e2x=0&&e2y=0
+                    float[] pre_des;
+                    if (si!=0) {
+                        System.out.print("requestCanvas=false & si!=0\n");
+                        //todo:查询的record not exist则转而查询上一个si所表示的月份从而得出
+                        //todo:本条si所代表的月份
+                        sql = String.format(queryWithES,"path_saver",email,--si);
+                        System.out.print("SQL 2b execute @requestCanvas:"+sql+"\n");
+                        //todo:先获取e3x,e3y,如果两者都为0,返回e2x,e2y
+                        ResultSet rs_des = statement.executeQuery(sql);
+                        rs_des.next();
+                        float pre_e3x = rs_des.getInt("e3x"),
+                                pre_e3y = rs_des.getInt(("e3y")),
+                                pre_e2x = rs_des.getInt("e2x"),
+                                pre_e2y = rs_des.getInt("e2y");
+                        boolean fourOrThree = pre_e3x!=0 && pre_e3y!=0;
+                        //todo:如果查明是有四个象限，则一律返回第四个象限的终点，
+                        //todo:如果是只有三个象限，则一律返回第三个象限的终点
+                        //todo:在上述情况下，如果si=0，取上一si得到的resultSet结果应该是0？
+                        pre_des = fourOrThree?
+                                new float[]{pre_e3x,pre_e3y}:
+                                new float[]{pre_e2x,pre_e2y};
+//                        ResultSet rs_ymd = statement.executeQuery(sql);
+//                        rs_ymd.next();
+//                        int year_rs_ymd = rs_ymd.getInt("year"),
+//                                month_rs_ymd = rs_ymd.getInt("month");
+//                        rBuilder.add("year",year_rs_ymd).add("month",month_rs_ymd);
+                    } else {
+                        pre_des = new float[]{0,0};
+                    }
+                    JsonArrayBuilder jab_des = Json.createArrayBuilder();
+                    jab_des.add(pre_des[0]).add(pre_des[1]);
+                    JsonArray ja_des = jab_des.build();
+                    rBuilder.add("preDes",ja_des);
+                    break;//如果一个屏幕的FP需要新开，那么content记录是必然不存在的
+                }
+            case "requestContent"://日期由客户端发送,{"reqDay":int[3]}
+                System.out.print("requestContent>>\n");
+                //todo:1.拼接文件名|2.读取文件|3.将读取到的信息添加到rBuilder里
+                si = joj.getInt("si"); pi = joj.getInt("pi");
+                boolean content_exist = true;
+                try {
+                    String filename = email+si+pi+".txt";
+                    System.out.print("file to open:"+filename+"\n");
+                    BufferedReader br = new BufferedReader(new FileReader(filename));
+                    String rContent = "", temp;
+                    //todo-b
+                    while ((temp = br.readLine())!=null) {
+                        rContent += temp;
+                    }
+                    rBuilder.add("content",rContent);
+                    sql = String.format(queryWithES,"path_saver",email,si);
+                    ResultSet rs_rc = statement.executeQuery(sql); rs_rc.next();
+                    year = rs_rc.getInt("year"); month = rs_rc.getInt("month");
+                    rBuilder.add("year",year).add("month",month);
+                } catch(FileNotFoundException f) {
+                    //todo-c
+                    System.out.print("file not found");
+                    content_exist = false;
+                } finally {
+                    //todo-d
+                    rBuilder.add("content_exist",content_exist);
+                    rBuilder.add("si",si).add("pi",pi);
+                }
+                break;
+            case "clearDB":
+                statement.execute("delete from pt_saver");
+                statement.execute("delete from path_saver");
+                break;
+        }
+        JsonWriter jw = Json.createWriter(socket.getOutputStream());
+        JsonObject oj = rBuilder.build();
+        System.out.print("<<"+oj+"\n");
+        //jw.write(rBuilder.build());
+        jw.write(oj);
+
+        jw.close();
+        socket.close();
+    }
+
+    private void show(String string) {
+        System.out.print(string+"\n");
+    }
+
+    private int[] getProperDate(int[] oldDate) {
+        int year = oldDate[0], month = oldDate[1], day = oldDate[2];
+        int curMonDay = 30;
+        switch (month) {
+            case 1: case 3: case 5: case 7: case 8: case 10: case 12:
+                curMonDay = 31;
+                break;
+            case 2:
+                curMonDay = year%4==0? 29: 28;
+                break;
+        }
+        day++;
+        if (day>curMonDay) {  //+1的日期后大于当月最大值
+            day = 1;
+            if ((month++)>12) {
+                year++;
+                month = 1;
             }
-            for (int i = 0;i < pos_tan.size();i++) {
-               JsonArray oneStep = pos_tan.getJsonArray(i);
-               statement.execute(
-                     "insert into pt_saver (email,pos_x,pos_y,tan1,tan2,s_i,p_i,year,month,day) values ('"+email+"',"+oneStep.getJsonNumber(0)+","+oneStep.getJsonNumber(1)+","+oneStep.getJsonNumber(2)+","+oneStep.getJsonNumber(3)+","+joj.getInt("s_i")+","+i+","+date[0]+","+date[1]+","+date[2]+");");
-               date = getProperDate(date[0],date[1],date[2]);
-            }
-            reply(socket,"respondType",requestType,"value","true");
-            break;
-         case "content"://根据当前日期
-            //用用户名+年月日拼接处存储在服务器端的用户名
-            System.out.print("today:"+today[0]+today[1]+today[2]+"\n");
-            BufferedWriter bw = new BufferedWriter(new FileWriter(
-                  joj.getString("email")+today[0]+today[1]+today[2]+".txt"));
-            bw.write(joj.getString("content"));
-            bw.flush();
-            break;
-         case "request_content"://日期由客户端发送,{"reqDay":int[3]}
-            //用用户名+年月日拼接处存储在服务器端的用户名
-            ResultSet rc = statement.executeQuery(
-                  "select year,month,day from pt_saver where email = '"+email+"' and s_i ="+joj.getInt("s_i")+" and p_i="+joj.getInt("p_i")+";");
-            rc.next();//这里有且只有一行，既不需要考虑空集问题也不需要考虑多行情况
-            int year = rc.getInt("year"), month = rc.getInt("month"),
-                  day = rc.getInt("day");
-            int date_cal = year*10000+month*100+day;
-            int today_cal = today[0]*10000+today[1]*100+today[2];
-            String time = date_cal > today_cal ? "tomorrow"
-                  : date_cal == today_cal ? "today" : "yesterday";
-            String temp = "";
+        }
+        return new int[]{year,month,day};
+    }
 
-            JsonArrayBuilder jb = Json.createArrayBuilder();
-            try {
-               BufferedReader br = new BufferedReader(new FileReader(email
-                     +rc.getInt("year")+rc.getInt("month")+rc.getInt("day")+".txt"));
-               while ((temp = br.readLine()) != null) {
-                  jb.add(temp);
-               }
-//          temp = temp == null ? "nah" : temp;
-            } catch (FileNotFoundException e) {
-               System.out.print("Record not exist!!!\n");
-//          temp = "nah";
-            }
-            JsonArray result = jb.build();
-            JsonWriter jw = Json.createWriter(socket.getOutputStream());
-            jw.write(Json.createObjectBuilder().add("respondType",requestType)
-                  .add("time",time).add("value",result).build());
-            jw.close();
-            break;
-         case "request_footprints":
-            int si = joj.getJsonNumber("which_path").intValue();
-            ResultSet rs = statement.executeQuery(
-                  "select * from pt_saver inner join path_saver on path_saver.s_i = pt_saver.s_i and pt_saver.email = \'"+email+"\' and pt_saver.s_i="+si);
-            JsonArrayBuilder builder = Json.createArrayBuilder();
-            boolean posTanEmpty = true;
-            boolean pathReady = false;
-            float staX = 0, staY = 0, endX = 0, endY = 0, c1X = 0, c1Y = 0, c2X = 0,
-                  c2Y = 0;
-
-            while (rs.next()) {
-               if (!pathReady) {
-                  staX = rs.getFloat("staX"); staY = rs.getFloat("staY");
-                  endX = rs.getFloat("endX"); endY = rs.getFloat("endY");
-                  c1X = rs.getFloat("c1X"); c1Y = rs.getFloat("c1Y");
-                  c2X = rs.getFloat("c2X"); c2Y = rs.getFloat("c2Y");
-                  pathReady = true;
-               }
-               posTanEmpty = false;
-               JsonObject footprint = Json.createObjectBuilder()
-                     .add("posX",rs.getFloat("pos_x")).add("posY",rs.getFloat("pos_y"))
-                     .add("tan1",rs.getFloat("tan1")).add("tan2",rs.getFloat("tan2"))
-                     .add("year",rs.getInt("year")).add("month",rs.getString("month"))
-                     .add("day",rs.getInt("day")).build();
-               builder.add(footprint);
-            }
-            JsonArray footprints = builder.build();
-            JsonObjectBuilder rJB = Json.createObjectBuilder()
-                  .add("respondType",requestType).add("existed",!posTanEmpty);
-            ResultSet rs_date = statement.executeQuery(
-                  "select year,month,day from pt_saver where email ='"+email+"'and s_i= "+si+" and p_i=0");
-            if (rs_date.next()) {
-               JsonArrayBuilder jab = Json.createArrayBuilder();
-               jab.add(rs_date.getInt("year")).add(rs_date.getInt("month"))
-                     .add(rs_date.getInt("day"));
-               rJB.add("date",jab.build());
-            }
-
-            ResultSet ss = statement.executeQuery(
-                  "select width,height from user_information where email =\'"+email+"\'");
-            int width_t = 0;
-            int height_t = 0;
-            if (ss.next()) {
-               width_t = ss.getInt("width");
-               height_t = ss.getInt("height");
-            }
-            if (!posTanEmpty)
-               rJB.add("footprints",footprints).add("staX",staX).add("staY",staY)
-                     .add("endX",endX).add("endY",endY).add("c1X",c1X).add("c1Y",c1Y)
-                     .add("c2X",c2X).add("c2Y",c2Y)
-                     .add("width",width_t).add("height",height_t);
-            JsonObject resJ = rJB.build();
-            System.out.print("respondJSON:"+resJ.getString("respondType")+"\n");
-            BufferedWriter bufferedWriter = new BufferedWriter(
-                  new OutputStreamWriter(socket.getOutputStream()));
-            bufferedWriter.write(resJ+"");
-            bufferedWriter.flush();
-            bufferedWriter.close();
-      }
-      socket.close();
-   }
-
-   private static void reply(Socket socket,String key1,String value1,
-         String key2,String value2) throws IOException {
-      JsonWriter jsonWriter = Json.createWriter(socket.getOutputStream());
-      jsonWriter.write(
-            Json.createObjectBuilder().add(key1,value1).add(key2,value2).build());
-      System.out.print("replying:"+key1+":"+value1+","+key2+":"+value2+"\n");
-      jsonWriter.close();
-   }
-
-   private int[] getProperDate(int year,int month,int day) {
-
-      int curMonDay = 30;
-      switch (month) {
-         case 1: case 3: case 5: case 7: case 8: case 10: case 12:
-            curMonDay = 31;
-            break;
-         case 2:
-            curMonDay = year%4 == 0 ? 29 : 28;
-            break;
-      }
-      day++;
-      if (day > curMonDay) {  //+1的日期后大于当月最大值
-         day = 1;
-         if ((month++) > 12) {
-            year++;
-            month = 1;
-         }
-      }
-      return new int[]{year,month,day};
-   }
-
-   static void log(Object string) {
-      System.out.print(string+"\n");
-   }
+    private float f(JsonNumber jsonNumber) {
+        return Float.parseFloat(jsonNumber+"");
+    }
 
 }
