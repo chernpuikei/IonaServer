@@ -14,6 +14,20 @@ public class Main {
         startListening();
     }
 
+    private static void testMethod() {
+        System.out.print("testMethod>>>\n");
+        String[][] check = new String[][]{new String[]{"a","b","c","d","e"},
+              new String[]{"f","g","h","i","j"}};
+        for (int i = 0;i<2;i++) {
+            String curToBeShown = "";
+            for (int j = 0;j<5;j++) {
+                curToBeShown += check[i][j];
+            }
+            curToBeShown += "\n";
+            System.out.print(curToBeShown);
+        }
+    }
+
     private static void startListening() {
         try {
             ServerSocket serversocket = new ServerSocket(20001);

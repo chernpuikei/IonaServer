@@ -5,8 +5,8 @@ import java.util.ArrayList;
  */
 class Map {
 
-    private String[][] world;
-    static final int MS = 70;
+    String[][] world;
+    static final int MS = 50;
     static final int MR = MS/2;
     private static final int MOUNT_TO_GENERATE = 3;
     private static final double PERCENTAGE = (double) MOUNT_TO_GENERATE/MS;
@@ -14,7 +14,7 @@ class Map {
     Map() {
         this.world = new String[MS][MS];
         basicTerrain();
-        checkDP(world);
+        Log.checkDP(world);
         river(mount());
         Log.showTotal(true,world);
     }
@@ -22,7 +22,7 @@ class Map {
     private void basicTerrain() {
         for (int hor = 0;hor<MS;hor++) {
             for (int j = 0;j<MS;j++) {
-                double centralDis = centralDistance(hor,j);
+                double centralDis = DoMath.centralDistance(hor,j);
                 world[hor][j] = basicTypeByDistance(centralDis);
             }
         }
@@ -32,12 +32,6 @@ class Map {
     private String basicTypeByDistance(double cd) {//cd for CentralDistance
         int hms = MS/2-2;//Half Map Size
         return cd<hms? cd<hms*0.9? cd<hms*0.65? cd<hms*0.05? "@": "-": "#": "*": "?";
-    }
-
-    //todo:计算出当前点的中心距离
-    private double centralDistance(int x,int y) {
-        int deltaX = Math.abs(x-MS/2), deltaY = Math.abs(y-MS/2);
-        return Math.sqrt(deltaX*deltaX+deltaY*deltaY);
     }
 
     //todo:从绿地中随机产生mountain
@@ -66,7 +60,7 @@ class Map {
                         world[x][ver] = "^";
                     }
                     //todo:left
-                    double[] formula1 = Bezier.getFormula(
+                    double[] formula1 = DoMath.getFormula(
                           new double[]{hor,ver-curHei},new double[]{hor-r,ver});
                     for (int x = hor-r;x<hor;x++) {
                         double temp = getBound(formula1,x);
@@ -76,7 +70,7 @@ class Map {
                         }
                     }
                     //todo:right
-                    double[] formula2 = Bezier.getFormula(
+                    double[] formula2 = DoMath.getFormula(
                           new double[]{hor,ver-curHei},new double[]{hor+r,ver});
                     for (int x = hor+1;x<=hor+r;x++) {
                         double temp = getBound(formula2,x);
@@ -100,22 +94,32 @@ class Map {
         int[] o = new int[]{MR,MR};//原点
         ArrayList<int[]> mountOri = new ArrayList<>();
         for (int i = 0;i<3;i++) {//迭代xs的同时也在迭代象限
-            Log.i("mount generating",i);
             int r = (int) (Math.random()*MR*0.6+MR*0.2);//半径100以外400以内
-            Log.i(2,"r",r);
-            int[] ranX = getRanX(i,r), ranY = getRanY(i,r);
-            int x = ranX[0]+((int) (Math.random()*(ranX[1]-ranX[0])));
+            int[] rangeX = getRanX(i,r), rangeY = getRanY(i,r);
+            int x = rangeX[0]+((int) (Math.random()*(rangeX[1]-rangeX[0])));
             int[] ys = generateYs(o,r,x);
-            int y = pickY(ys,ranY);
+            int y = pickY(ys,rangeY);
             mountOri.add(new int[]{x,y});
-            world[y][x] = "^";
+            world[x][y] = mountMark(i);
 //            Log.i(4,"final X/Y/R",x+"/"+y+"/"+r);
 //            Log.i(4,"(x-500)^2+(y-500)^2",(x-o[0])*(x-o[0])+(y-o[1])*(y-o[1]));
 //            Log.i(4,"r*r",r*r);
         }
         Log.iiArrayList("mountBuilt",mountOri);
-        Log.showTotal(true,world);
+//        Log.showTotal(true,world);
         return mountOri;
+    }
+
+    private String mountMark(int area) {
+        switch (area) {
+            case 0:
+                return "a";
+            case 1:
+                return "b";
+            case 2:
+                return "c";
+        }
+        return "e";
     }
 
     private int[] getRanX(int area,int r) {
@@ -188,77 +192,127 @@ class Map {
         return (curArea+3-1)%3;
     }
 
+    private void riverRunsAnotherWay(ArrayList<int[]> mountOri) {
+        ArrayList<double[]> mOri = arrayListInt2Double(mountOri);//double form AL
+        ArrayList<double[]> separated = twoToEight(mOri);//2 to 8
+    }
+
+    private ArrayList<double[]> twoToEight(ArrayList<double[]> mOri) {
+        ArrayList<double[]> result = new ArrayList<>();
+        for (int i = 0;i<mOri.size();i++) {//mountOri([0-2]/3)
+            ArrayList<double[]> restCopy = mOri;
+            double[] curOri = mOri.get(i);
+            restCopy.remove(curOri);
+            int loopCounter = 0;
+            for (int j = 0;j<restCopy.size();j++) {
+                Log.i(2,"counter",loopCounter);
+                double[] ori = restCopy.get(i);//ori in rest
+                for (int k = 0;k<ori.length;k++) {//x|y in ori,决定顺序
+                    Log.i(4,"counter",loopCounter);
+                    boolean xoy = k==0;
+                    double[] pair = new double[2];//restore result pair
+                    double[] onCycle = DoMath.oneAnotherCycle(ori[k]);
+                    for (int l = 0;l<onCycle.length;l++) {//决定
+                        Log.i(8,"counter",loopCounter);
+                        pair[0] = xoy? onCycle[l]: ori[k];
+                        pair[1] = xoy? ori[k]: onCycle[l];
+                    }
+                    result.add(pair);
+                }
+            }
+        }
+        return result;
+    }
+
+    private boolean tfWith01(int check) { return check==0; }
+
+    private ArrayList<double[]> arrayListInt2Double(ArrayList<int[]> mountOri) {
+        ArrayList<double[]> result = new ArrayList<>();
+        for (int i = 0;i<mountOri.size();i++) {
+            result.add(arrayInt2Double(mountOri.get(i)));
+        }
+        return result;
+    }
+
+    private double[] arrayInt2Double(int[] curOri) {
+        double[] result = new double[curOri.length];
+        for (int i = 0;i<curOri.length;i++) {
+            result[i] = (double) (curOri[i]*Bezier.ppe);
+        }
+        return result;
+    }
+
     private void river(ArrayList<int[]> mountOri) {
         Log.i("river>>");
         Integer[] total = new Integer[]{0,1,2};
         for (int i = 0;i<mountOri.size();i++) {
             int[] curOri = mountOri.get(i);
+            Log.i("river——"+i);
+            Log.c(2,"curOri",curOri);
             Integer[] ri = pickTheRest(total,i);//for rest index
-            double[] formula = Bezier.getFormula(
+            double[] formula = DoMath.getFormula(
                   mountOri.get(ri[0]),mountOri.get(ri[1]));//余下两点连成的线段的方程
             double[] bound = calBound(mountOri.get(ri[0]),mountOri.get(ri[1]));
             boolean lor = leftOrRight(curOri,formula);
+            Log.i(2,"curOri lor",lor);
             int[] des = genDes(i,lor,formula[0]>0,bound,mountOri.get(i));
-
-            world[des[0]][des[1]] = i+"";
-//            ArrayList<Integer[]> river = new Bezier(mountOri.get(i),des).getArrayList();
+            world[des[0]][des[1]] = switchDes(i);
+            Bezier curBezier = new Bezier(mountOri.get(i),des);
+            ArrayList<Integer[]> river = curBezier.getArrayList();
+            int[] bc = curBezier.getControl(), mp = curBezier.getMP();
+            Log.i(2,"bc",bc);
+//            world[bc[0]][bc[1]] = switchDes(i);
 //            for (Integer[] pixel : river) {
 //                world[pixel[1]][pixel[0]] = "~";
 //            }
         }
+        Log.i("<<river");
     }
 
-    private static void checkDP(String[][] world) {//check Divide Point
-        int r = MS/2;
-        ArrayList<int[]> check = new ArrayList<>();
-        double hello = Math.sqrt(3)/2, hi = r*1.5;
-        check.add(new int[]{r,0});
-        check.add(new int[]{(int) ((1-hello)*r),(int) hi});
-        check.add(new int[]{(int) ((1+hello)*r),(int) hi});
-        for (int i = 0;i<check.size();i++) {
-            int[] cur = check.get(i);
-            world[cur[0]][cur[1]] = "D";
+    private String switchDes(int cur) {
+        switch (cur) {
+            case 0:
+                return "A";
+            case 1:
+                return "B";
+            case 2:
+                return "C";
+            default:
+                return "V";
         }
-        Log.iiArrayList(0,"dividePoint",check);
     }
 
-    private static int[] genDes(int counter,boolean lor,boolean pon,double[] bounds,int[] mount) {
+    private static int[] genDes(
+          int counter,boolean lor,boolean pon,double[] bounds,int[] mount) {
         //bounds:{上下左右}
-        Log.i(4,"genDes>>",counter);
-        boolean hov = Math.random()>0.5, same = same(pon,hov);
-        double takBou = bounds[hov? lor? 2: 3: same? 1: 0];//四选一
-        Log.i(6,"bound taken",takBou);
-        double[] range = new double[]{//上面已经选过，这里只是决定takBou是作为起点还是终点
-              hov? lor? 0: takBou: same? takBou: 0,
+        boolean hov = Math.random()>0.5, same = same(pon,hov);//两个指标
+        int tblr = hov? lor? 2: 3: same? 1: 0;//上下左右选一个
+        double takBou = bounds[tblr];
+        double[] range = new double[]{hov? lor? 0: takBou: same? takBou: 0,
               hov? lor? takBou: MS-1: same? MS-1: takBou};
-        Log.c(6,"range?",range);
         double ranSpa = range[1]-range[0], //计算出随机空间
               taken = range[0]+Math.random()*ranSpa;//计算出随机x|y
-        Log.i(6,"ranSpa",ranSpa);
-        Log.i(6,"range[0]+random()(range[1]-range[0])");
-        double[] xy4yx = oneAnotherCycle(taken);//随机坐标投射到圆上得出y|x(两个)
-        Log.c(6,"xy4yx(2)",xy4yx);
+        double[] xy4yx = DoMath.oneAnotherCycle(taken);//随机坐标投射到圆上得出y|x(两个)
         int[][] psb = new int[2][2];//PosSiBle
         for (int i = 0;i<2;i++) {//分别算出两个结果距离当前mountOri的长度，取长度较长的一个
             psb[i][0] = (int) (hov? xy4yx[i]: taken);
             psb[i][1] = (int) (hov? taken: xy4yx[i]);
         }
         int[] result =
-              psb[Bezier.calDis(mount,psb[0])>Bezier.calDis(mount,psb[1])? 0: 1];
+              psb[DoMath.calDis(mount,psb[0])>DoMath.calDis(mount,psb[1])? 0: 1];
+        Log.i(4,"genDes>>",counter);
+        Log.i(6,"takBou",takBou);
+        Log.c(6,"range?",range);
+        Log.i(6,"ranSpa",ranSpa);
+        Log.i(6,"range[0]+random()(range[1]-range[0])");
+        Log.c(6,"xy4yx(2)",xy4yx);
         Log.c(6,"des generated",result);
         Log.i(4,"<<genDes");
         return result;
 
     }
 
-    private static double[] oneAnotherCycle(double cur) {
-        Log.i("onAnotherCycle>>>"); Log.i(2,"input x|y",cur);
-        double r = MS/2, dx = Math.abs(cur-r);
-        double check = Math.sqrt(r*r-dx*dx);
-        double[] result = new double[]{r+check,r-check};
-        Log.c(2,"possible result",result); Log.i("<<<onAnotherCycle");
-        return result;
-    }
+
 
     private static boolean same(boolean pon,boolean hov) {
         return (pon && hov) | (!pon && !hov);

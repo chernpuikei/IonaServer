@@ -166,8 +166,8 @@ class Log {
     static void iiArrayList(String header,ArrayList<int[]> target) {
         iiArrayList(0,header,target);
     }
-
     static void showTotal(boolean mergeByDifference,String[][] world) {
+
         if (mergeByDifference) alterTheScene(world,calChangeList(world));
         for (int y = 0;y<world.length;y++) {
             for (int x = 0;x<world[y].length;x++) {
@@ -216,6 +216,20 @@ class Log {
             allTheSame = curString.equals(world[cur[0]][ver[i]]);
         }
         return allTheSame;
+    }
+
+    static void checkDP(String[][] world) {//check Divide Point
+        int r = Map.MS/2;
+        ArrayList<int[]> check = new ArrayList<>();
+        double hello = Math.sqrt(3)/2, hi = r*1.5;
+        check.add(new int[]{r,0});
+        check.add(new int[]{(int) ((1-hello)*r),(int) hi});
+        check.add(new int[]{(int) ((1+hello)*r),(int) hi});
+        for (int i = 0;i<check.size();i++) {
+            int[] cur = check.get(i);
+            world[cur[0]][cur[1]] = "D";
+        }
+        Log.iiArrayList(0,"dividePoint",check);
     }
 
 }
